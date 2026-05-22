@@ -455,7 +455,7 @@
 
     function tendencyLabel(delta) {
       if (delta >  3) return 'szybka poprawa pogody';
-      if (delta >  1) return 'wyjaśnia się';
+      if (delta >  1) return 'coraz lepsza pogoda';
       if (delta > -1) return 'stabilne';
       if (delta > -3) return 'front nadchodzi';
       return 'gwałtowne pogorszenie';
@@ -557,39 +557,49 @@
     ═══════════════════════════════════════════════ */
     // recorded_at (ms) of the last row returned by Supabase
     let lastDataTimestamp = null;
-    // true while fetch is in-flight — freshness check skips to avoid flicker
     let isLoading         = false;
-    // true if the last fetch HTTP call succeeded
     let lastFetchOk       = false;
     let countdownId       = null;
+    let earlyFetchDone    = false;  // fetch 60s przed końcem
+    let lateFetchDone     = false;  // fetch 3s po końcu
 
-    const DATA_EXPECT_MS = 5 * 60 * 1000;  // 5 min → waiting for data
-    const OFFLINE_MS     = 6 * 60 * 1000;  // 6 min → device offline
+    const DATA_EXPECT_MS = 5 * 60 * 1000;
+    const OFFLINE_MS     = 6 * 60 * 1000;
+    const EARLY_TRIGGER  = 60 * 1000;   // 60s przed
+    const LATE_TRIGGER   = -3 * 1000;   // 3s po
 
     function updateDataFreshness() {
       const el  = document.getElementById('countdown');
       const dot = document.getElementById('statusDot');
 
-      // Don't override the loading spinner
       if (isLoading || !lastDataTimestamp) { el.textContent = ''; return; }
 
       const age       = Date.now() - lastDataTimestamp;
       const remaining = DATA_EXPECT_MS - age;
 
+      // ── Zsynchronizowane fetche ──
+      if (!earlyFetchDone && remaining <= EARLY_TRIGGER && remaining > 0) {
+        earlyFetchDone = true;
+        loadData(activeHours);
+        return;
+      }
+      if (!lateFetchDone && remaining <= LATE_TRIGGER) {
+        lateFetchDone = true;
+        loadData(activeHours);
+        return;
+      }
+
       if (remaining > 0) {
-        // ✅ Data is fresh — show countdown to next expected reading
         const m = Math.floor(remaining / 60000).toString().padStart(2, '0');
         const s = Math.floor((remaining % 60000) / 1000).toString().padStart(2, '0');
         el.textContent = `Następne dane za ${m}:${s}`;
         el.className   = 'countdown';
         if (lastFetchOk) dot.className = 'status-dot ok';
       } else if (age < OFFLINE_MS) {
-        // ⚠️ 5–6 min without new data
         el.textContent = 'Oczekiwanie na aktualne dane…';
         el.className   = 'countdown warn';
         dot.className  = 'status-dot warn';
       } else {
-        // ❌ > 6 min — device not sending
         const lastTime = new Date(lastDataTimestamp).toLocaleTimeString('pl-PL', {
           hour: '2-digit', minute: '2-digit', second: '2-digit',
         });
@@ -624,6 +634,8 @@
 
       // Store freshest data point timestamp for offline detection
       lastDataTimestamp = new Date(last.recorded_at).getTime();
+      earlyFetchDone    = false;
+      lateFetchDone     = false;
 
       // Current values
       document.getElementById('cardTemp').textContent  = `${last.temp_c} °C`;
