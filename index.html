@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stacja Pogodowa ESP32-S3</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0f1117;
+      --surface:  #1a1d27;
+      --border:   #2a2d3a;
+      --text:     #e2e8f0;
+      --muted:    #8892a4;
+      --amber:    #f59e0b;
+      --blue:     #4f8ef7;
+      --teal:     #2dd4bf;
+      --red:      #ef4444;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      padding: 16px;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: var(--amber);
+    }
+    .status-dot.ok  { background: var(--teal);  animation: none; }
+    .status-dot.err { background: var(--red);   animation: none; }
+    .status-dot.load {
+      background: var(--amber);
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.3; }
+    }
+
+    .status-text {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    header h1 {
+      font-size: 1.2rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      flex: 1;
+      min-width: 200px;
+    }
+
+    /* ── Range bar ── */
+    .range-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .range-bar button {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 6px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-family: inherit;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .range-bar button:hover {
+      border-color: var(--blue);
+      color: var(--text);
+    }
+
+    .range-bar button.active {
+      border-color: var(--blue);
+      color: var(--blue);
+      background: #1a1d27;
+    }
+
+    /* ── Cards ── */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .card-label {
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 6px;
+    }
+
+    .card-value {
+      font-size: 2rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .card-value.amber { color: var(--amber); }
+    .card-value.blue  { color: var(--blue);  }
+    .card-value.teal  { color: var(--teal);  }
+    .card-value.muted { color: var(--text); font-size: 1.1rem; line-height: 1.3; }
+
+    .card-sub {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    /* ── Charts ── */
+    .charts {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .chart-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .chart-title {
+      font-size: 0.8rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 10px;
+    }
+
+    .chart-card canvas {
+      height: 180px !important;
+    }
+
+    @media (min-width: 640px) {
+      .chart-card canvas {
+        height: 200px !important;
+      }
+    }
+
+    /* ── Empty / Error ── */
+    #empty {
+      display: none;
+      text-align: center;
+      color: var(--muted);
+      padding: 40px 20px;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="status-dot load" id="statusDot"></div>
+    <span class="status-text" id="statusText">Ładowanie…</span>
+    <h1>Stacja Pogodowa ESP32-S3</h1>
+  </header>
+
+  <div class="range-bar">
+    <button data-h="24"  class="active">24h</button>
+    <button data-h="48">48h</button>
+    <button data-h="168">7 dni</button>
+    <button data-h="720">30 dni</button>
+  </div>
+
+  <div class="cards">
+    <div class="card">
+      <div class="card-label">Temperatura</div>
+      <div class="card-value amber" id="cardTemp">—</div>
+      <div class="card-sub" id="cardTempSub">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Wilgotność</div>
+      <div class="card-value blue" id="cardHum">—</div>
+      <div class="card-sub" id="cardHumSub">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Ciśnienie</div>
+      <div class="card-value teal" id="cardPres">—</div>
+      <div class="card-sub" id="cardPresSub">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Ostatni sync</div>
+      <div class="card-value muted" id="cardSync">—</div>
+      <div class="card-sub" id="cardCount">—</div>
+    </div>
+  </div>
+
+  <div id="empty">Brak danych dla wybranego zakresu.</div>
+
+  <div class="charts">
+    <div class="chart-card">
+      <div class="chart-title">Temperatura (°C)</div>
+      <canvas id="chartTemp"></canvas>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Wilgotność (%)</div>
+      <canvas id="chartHum"></canvas>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Ciśnienie (hPa)</div>
+      <canvas id="chartPres"></canvas>
+    </div>
+  </div>
+
+  <script>
+    const SUPABASE_URL      = 'https://izudnxavhfuuxdnyckdh.supabase.co';
+    const SUPABASE_ANON_KEY = 'TWOJ_PUBLISHABLE_KEY';  // ← uzupełnij
+    const TABLE             = 'readings';
+
+    const CHART_DEFAULTS = {
+      type: 'line',
+      options: {
+        animation: false,
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { display: false } },
+        scales: {
+          x: {
+            ticks: { maxTicksLimit: 8, color: '#8892a4', font: { size: 11 } },
+            grid:  { color: '#2a2d3a' },
+          },
+          y: {
+            ticks: { maxTicksLimit: 5, color: '#8892a4', font: { size: 11 } },
+            grid:  { color: '#2a2d3a' },
+          },
+        },
+      },
+    };
+
+    function makeDataset(color, data) {
+      return {
+        data,
+        borderColor: color,
+        backgroundColor: color + '18',
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        fill: true,
+        tension: 0.3,
+      };
+    }
+
+    function makeChart(id, color) {
+      const ctx = document.getElementById(id).getContext('2d');
+      return new Chart(ctx, {
+        ...CHART_DEFAULTS,
+        data: { labels: [], datasets: [makeDataset(color, [])] },
+      });
+    }
+
+    const charts = {
+      temp: makeChart('chartTemp', '#f59e0b'),
+      hum:  makeChart('chartHum',  '#4f8ef7'),
+      pres: makeChart('chartPres', '#2dd4bf'),
+    };
+
+    function setStatus(state) {
+      const dot  = document.getElementById('statusDot');
+      const text = document.getElementById('statusText');
+      dot.className = 'status-dot ' + state;
+      if (state === 'load') text.textContent = 'Ładowanie…';
+      if (state === 'ok')   text.textContent = 'Połączono';
+      if (state === 'err')  text.textContent = 'Błąd połączenia';
+    }
+
+    function formatTime(iso, hours) {
+      const d = new Date(iso);
+      if (hours <= 48) {
+        return d.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+      }
+      return d.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' })
+           + ' ' + d.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function minmax(arr) {
+      return { min: Math.min(...arr), max: Math.max(...arr) };
+    }
+
+    function renderData(rows, hours) {
+      const labels = rows.map(r => formatTime(r.recorded_at, hours));
+      const temps  = rows.map(r => r.temp_c);
+      const hums   = rows.map(r => r.humidity_pct);
+      const press  = rows.map(r => r.pressure_hpa);
+
+      charts.temp.data.labels = labels;
+      charts.temp.data.datasets[0].data = temps;
+      charts.temp.update();
+
+      charts.hum.data.labels = labels;
+      charts.hum.data.datasets[0].data = hums;
+      charts.hum.update();
+
+      charts.pres.data.labels = labels;
+      charts.pres.data.datasets[0].data = press;
+      charts.pres.update();
+
+      const last = rows[rows.length - 1];
+      document.getElementById('cardTemp').textContent  = last.temp_c + ' °C';
+      document.getElementById('cardHum').textContent   = last.humidity_pct + ' %';
+      document.getElementById('cardPres').textContent  = last.pressure_hpa + ' hPa';
+
+      const syncTime = new Date(last.recorded_at).toLocaleTimeString('pl-PL', {
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+      });
+      document.getElementById('cardSync').textContent  = syncTime;
+      document.getElementById('cardCount').textContent = rows.length + ' odczytów';
+
+      const mm = { t: minmax(temps), h: minmax(hums), p: minmax(press) };
+      document.getElementById('cardTempSub').textContent  = `min ${mm.t.min} · max ${mm.t.max} °C`;
+      document.getElementById('cardHumSub').textContent   = `min ${mm.h.min} · max ${mm.h.max} %`;
+      document.getElementById('cardPresSub').textContent  = `min ${mm.p.min} · max ${mm.p.max} hPa`;
+
+      document.getElementById('empty').style.display = 'none';
+    }
+
+    async function loadData(hours) {
+      setStatus('load');
+      const since = new Date(Date.now() - hours * 3600 * 1000).toISOString();
+      const url = `${SUPABASE_URL}/rest/v1/${TABLE}`
+        + `?recorded_at=gte.${since}`
+        + `&order=recorded_at.asc`
+        + `&select=recorded_at,temp_c,pressure_hpa,humidity_pct`;
+
+      try {
+        const res = await fetch(url, {
+          headers: {
+            apikey:        SUPABASE_ANON_KEY,
+            Authorization: 'Bearer ' + SUPABASE_ANON_KEY,
+          },
+        });
+        if (!res.ok) throw new Error(res.status);
+        const rows = await res.json();
+
+        if (!rows.length) {
+          setStatus('err');
+          document.getElementById('empty').style.display = 'block';
+          return;
+        }
+
+        renderData(rows, hours);
+        setStatus('ok');
+      } catch (e) {
+        setStatus('err');
+        document.getElementById('empty').style.display = 'block';
+        console.error('Fetch error:', e);
+      }
+    }
+
+    /* ── Range buttons ── */
+    let activeHours = 24;
+    let timer = null;
+
+    function startInterval() {
+      clearInterval(timer);
+      timer = setInterval(() => loadData(activeHours), 5 * 60 * 1000);
+    }
+
+    document.querySelectorAll('.range-bar button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.range-bar button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        activeHours = parseInt(btn.dataset.h);
+        loadData(activeHours);
+        startInterval();
+      });
+    });
+
+    /* ── Init ── */
+    loadData(activeHours);
+    startInterval();
+  </script>
+</body>
+</html>
