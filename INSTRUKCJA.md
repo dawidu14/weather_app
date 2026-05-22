@@ -28,7 +28,7 @@ Jeden plik. Żadnych node_modules. Żadnego build stepu.
 
 ```js
 const SUPABASE_URL      = 'https://izudnxavhfuuxdnyckdh.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_...';   // publishable key
+const SUPABASE_ANON_KEY = 'placeholder';   // publishable key
 const TABLE             = 'readings';
 ```
 
