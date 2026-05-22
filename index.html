@@ -55,9 +55,11 @@
       border-radius: 50%;
       flex-shrink: 0;
     }
-    .status-dot.ok   { background: var(--teal);  animation: none; }
-    .status-dot.err  { background: var(--red);   animation: none; }
-    .status-dot.load {
+    .status-dot.ok      { background: var(--teal);  animation: none; }
+    .status-dot.err     { background: var(--red);   animation: none; }
+    .status-dot.offline { background: var(--red);   animation: none; }
+    .status-dot.load,
+    .status-dot.warn {
       background: var(--amber);
       animation: pulse 1.2s ease-in-out infinite;
     }
@@ -90,9 +92,12 @@
       font-size: 0.78rem;
       color: var(--muted);
       font-variant-numeric: tabular-nums;
-      min-width: 140px;
+      min-width: 200px;
       text-align: right;
+      transition: color 0.3s;
     }
+    .countdown.warn { color: var(--amber); }
+    .countdown.err  { color: var(--red); }
 
     /* CSV button */
     .btn-csv {
@@ -483,18 +488,50 @@
     }
 
     /* ═══════════════════════════════════════════════
-       COUNTDOWN
+       DATA FRESHNESS (countdown / offline detection)
     ═══════════════════════════════════════════════ */
-    let nextRefreshAt = null;
-    let countdownId   = null;
+    // recorded_at (ms) of the last row returned by Supabase
+    let lastDataTimestamp = null;
+    // true while fetch is in-flight — freshness check skips to avoid flicker
+    let isLoading         = false;
+    // true if the last fetch HTTP call succeeded
+    let lastFetchOk       = false;
+    let countdownId       = null;
 
-    function updateCountdown() {
-      const el = document.getElementById('countdown');
-      if (!nextRefreshAt) { el.textContent = ''; return; }
-      const rem = Math.max(0, Math.ceil((nextRefreshAt - Date.now()) / 1000));
-      const m   = Math.floor(rem / 60).toString().padStart(2, '0');
-      const s   = (rem % 60).toString().padStart(2, '0');
-      el.textContent = `Odświeżenie za ${m}:${s}`;
+    const DATA_EXPECT_MS = 5 * 60 * 1000;  // 5 min → waiting for data
+    const OFFLINE_MS     = 6 * 60 * 1000;  // 6 min → device offline
+
+    function updateDataFreshness() {
+      const el  = document.getElementById('countdown');
+      const dot = document.getElementById('statusDot');
+
+      // Don't override the loading spinner
+      if (isLoading || !lastDataTimestamp) { el.textContent = ''; return; }
+
+      const age       = Date.now() - lastDataTimestamp;
+      const remaining = DATA_EXPECT_MS - age;
+
+      if (remaining > 0) {
+        // ✅ Data is fresh — show countdown to next expected reading
+        const m = Math.floor(remaining / 60000).toString().padStart(2, '0');
+        const s = Math.floor((remaining % 60000) / 1000).toString().padStart(2, '0');
+        el.textContent = `Następne dane za ${m}:${s}`;
+        el.className   = 'countdown';
+        if (lastFetchOk) dot.className = 'status-dot ok';
+      } else if (age < OFFLINE_MS) {
+        // ⚠️ 5–6 min without new data
+        el.textContent = 'Oczekiwanie na aktualne dane…';
+        el.className   = 'countdown warn';
+        dot.className  = 'status-dot warn';
+      } else {
+        // ❌ > 6 min — device not sending
+        const lastTime = new Date(lastDataTimestamp).toLocaleTimeString('pl-PL', {
+          hour: '2-digit', minute: '2-digit', second: '2-digit',
+        });
+        el.textContent = `Urządzenie offline · ostatni odczyt ${lastTime}`;
+        el.className   = 'countdown err';
+        dot.className  = 'status-dot offline';
+      }
     }
 
     /* ═══════════════════════════════════════════════
@@ -519,6 +556,9 @@
 
       const first = rows[0];
       const last  = rows[rows.length - 1];
+
+      // Store freshest data point timestamp for offline detection
+      lastDataTimestamp = new Date(last.recorded_at).getTime();
 
       // Current values
       document.getElementById('cardTemp').textContent  = `${last.temp_c} °C`;
@@ -555,6 +595,7 @@
        FETCH
     ═══════════════════════════════════════════════ */
     async function loadData(hours) {
+      isLoading = true;
       setStatus('load');
       setLoading(true);
 
@@ -574,6 +615,8 @@
         if (!res.ok) throw new Error(res.status);
         const rows = await res.json();
 
+        lastFetchOk = true;
+        isLoading   = false;
         setLoading(false);
 
         if (!rows.length) {
@@ -584,7 +627,10 @@
 
         renderData(rows, hours);
         setStatus('ok');
+        updateDataFreshness();   // paint countdown immediately after render
       } catch (e) {
+        lastFetchOk = false;
+        isLoading   = false;
         setLoading(false);
         setStatus('err');
         document.getElementById('empty').style.display = 'block';
@@ -601,13 +647,8 @@
     function startInterval() {
       clearInterval(timerId);
       clearInterval(countdownId);
-      nextRefreshAt = Date.now() + REFRESH_MS;
-      timerId     = setInterval(() => {
-        loadData(activeHours);
-        nextRefreshAt = Date.now() + REFRESH_MS;
-      }, REFRESH_MS);
-      countdownId = setInterval(updateCountdown, 1000);
-      updateCountdown();
+      timerId     = setInterval(() => loadData(activeHours), REFRESH_MS);
+      countdownId = setInterval(updateDataFreshness, 1000);
     }
 
     document.querySelectorAll('.range-bar button').forEach(btn => {
