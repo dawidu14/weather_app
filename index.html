@@ -22,6 +22,7 @@
       --teal:       #2dd4bf;
       --red:        #ef4444;
       --green:      #22c55e;
+      --violet:     #a78bfa;
     }
 
     body {
@@ -183,10 +184,16 @@
       line-height: 1;
       position: relative;  /* needed for skeleton ::after */
     }
-    .card-value.amber { color: var(--amber); }
-    .card-value.blue  { color: var(--blue); }
-    .card-value.teal  { color: var(--teal); }
-    .card-value.muted { color: var(--text); font-size: 1.1rem; line-height: 1.3; }
+    .card-value.amber   { color: var(--amber); }
+    .card-value.blue    { color: var(--blue); }
+    .card-value.teal    { color: var(--teal); }
+    .card-value.violet  { color: var(--violet); }
+    .card-value.muted   { color: var(--text); font-size: 1.1rem; line-height: 1.3; }
+    .card-value.comfort { color: var(--text); font-size: 1.25rem; line-height: 1.25; }
+    /* Tendency value colour set dynamically via JS */
+    .card-value.pos { color: var(--teal); }
+    .card-value.neg { color: var(--amber); }
+    .card-value.flat{ color: var(--muted); }
 
     /* Trend row */
     .card-trend {
@@ -345,6 +352,21 @@
       <div class="card-value muted" id="cardSync">—</div>
       <div class="card-sub"  id="cardCount">— odczytów</div>
     </div>
+    <div class="card is-loading">
+      <div class="card-label">Punkt rosy</div>
+      <div class="card-value violet" id="cardDew">—</div>
+      <div class="card-sub" id="cardDewSub">—</div>
+    </div>
+    <div class="card is-loading">
+      <div class="card-label">Tendencja ciśnienia</div>
+      <div class="card-value flat" id="cardTend">—</div>
+      <div class="card-sub" id="cardTendSub">brak danych</div>
+    </div>
+    <div class="card is-loading">
+      <div class="card-label">Komfort cieplny</div>
+      <div class="card-value comfort" id="cardComfort">—</div>
+      <div class="card-sub" id="cardComfortSub">—</div>
+    </div>
   </div>
 
   <div id="empty">
@@ -406,6 +428,49 @@
       if (diff > 0.05)  return `<span class="trend-up">↑ +${abs} ${unit}</span>`;
       if (diff < -0.05) return `<span class="trend-down">↓ −${abs} ${unit}</span>`;
       return `<span class="trend-flat">→ bez zmian</span>`;
+    }
+
+    /* ── Punkt rosy (Magnus) ── */
+    function dewPoint(T, RH) {
+      const a = 17.625, b = 243.04;
+      const α = Math.log(RH / 100) + (a * T) / (b + T);
+      return parseFloat((b * α / (a - α)).toFixed(1));
+    }
+
+    /* ── Tendencja ciśnienia (Δ względem ~3h temu) ── */
+    function pressureTendency(rows) {
+      if (rows.length < 2) return null;
+      const last     = rows[rows.length - 1];
+      const lastTime = new Date(last.recorded_at).getTime();
+      const target   = lastTime - 3 * 3600 * 1000;
+      let ref = rows[0], bestDiff = Infinity;
+      for (const r of rows) {
+        const d = Math.abs(new Date(r.recorded_at).getTime() - target);
+        if (d < bestDiff) { bestDiff = d; ref = r; }
+      }
+      const delta   = parseFloat((last.pressure_hpa - ref.pressure_hpa).toFixed(1));
+      const spanH   = ((lastTime - new Date(ref.recorded_at).getTime()) / 3600000).toFixed(1);
+      return { delta, spanH };
+    }
+
+    function tendencyLabel(delta) {
+      if (delta >  3) return 'szybka poprawa pogody';
+      if (delta >  1) return 'wyjaśnia się';
+      if (delta > -1) return 'stabilne';
+      if (delta > -3) return 'front nadchodzi';
+      return 'gwałtowne pogorszenie';
+    }
+
+    /* ── Komfort cieplny ── */
+    function comfortIndex(T, RH) {
+      if (T <= 0)               return { e: '❄️',  l: 'Mróz' };
+      if (T <= 10)              return { e: '🧊',  l: 'Zimno' };
+      if (T <= 20 && RH <= 70) return { e: '✅',  l: 'Komfortowo' };
+      if (T <= 20)              return { e: '💧',  l: 'Chłodno i wilgotno' };
+      if (T <= 26 && RH <= 60) return { e: '☀️',  l: 'Przyjemnie ciepło' };
+      if (T <= 26)              return { e: '😰',  l: 'Duszno' };
+      if (T <= 32 && RH <= 50) return { e: '🌡️', l: 'Gorąco' };
+      return                         { e: '🔥',  l: 'Gorąco i duszno' };
     }
 
     /* ═══════════════════════════════════════════════
@@ -581,6 +646,33 @@
       document.getElementById('cardTempSub').textContent  = `min ${mm.t.min} · max ${mm.t.max} °C`;
       document.getElementById('cardHumSub').textContent   = `min ${mm.h.min} · max ${mm.h.max} %`;
       document.getElementById('cardPresSub').textContent  = `min ${mm.p.min} · max ${mm.p.max} hPa`;
+
+      // ── Punkt rosy ──
+      const dew = dewPoint(last.temp_c, last.humidity_pct);
+      document.getElementById('cardDew').textContent = `${dew} °C`;
+      const dewDiff = parseFloat((last.temp_c - dew).toFixed(1));
+      document.getElementById('cardDewSub').textContent =
+        dewDiff <= 2  ? '⚠️ Ryzyko mgły / kondensacji' :
+        dew   >= 20   ? '💧 Duszno (rosa wysoka)'      :
+                        `${dewDiff} °C poniżej temp.`;
+
+      // ── Tendencja ciśnienia ──
+      const tend = pressureTendency(rows);
+      if (tend) {
+        const sign = tend.delta > 0 ? '+' : '';
+        const cls  = tend.delta >  1 ? 'pos' : tend.delta < -1 ? 'neg' : 'flat';
+        const el   = document.getElementById('cardTend');
+        el.textContent = `${sign}${tend.delta} hPa`;
+        el.className   = `card-value ${cls}`;
+        document.getElementById('cardTendSub').textContent =
+          `${tendencyLabel(tend.delta)} · ${tend.spanH}h`;
+      }
+
+      // ── Komfort cieplny ──
+      const c = comfortIndex(last.temp_c, last.humidity_pct);
+      document.getElementById('cardComfort').textContent = `${c.e} ${c.l}`;
+      document.getElementById('cardComfortSub').textContent =
+        `${last.temp_c}°C · ${last.humidity_pct}% wilg.`;
 
       // Dynamic tab title
       document.title = `${last.temp_c}°C · ${last.humidity_pct}% | Stacja Pogodowa`;
