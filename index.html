@@ -1,28 +1,36 @@
 <!DOCTYPE html>
 <html lang="pl">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Stacja Pogodowa ESP32-S3</title>
   <!-- Emoji favicon -->
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌡️</text></svg>" />
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌡️</text></svg>" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
     :root {
-      --bg:         #0f1117;
-      --surface:    #1a1d27;
+      --bg: #0f1117;
+      --surface: #1a1d27;
       --surface-hi: #22263a;
-      --border:     #2a2d3a;
-      --text:       #e2e8f0;
-      --muted:      #8892a4;
-      --amber:      #f59e0b;
-      --blue:       #4f8ef7;
-      --teal:       #2dd4bf;
-      --red:        #ef4444;
-      --green:      #22c55e;
-      --violet:     #a78bfa;
+      --border: #2a2d3a;
+      --text: #e2e8f0;
+      --muted: #8892a4;
+      --amber: #f59e0b;
+      --blue: #4f8ef7;
+      --teal: #2dd4bf;
+      --red: #ef4444;
+      --green: #22c55e;
+      --violet: #a78bfa;
     }
 
     body {
@@ -56,9 +64,22 @@
       border-radius: 50%;
       flex-shrink: 0;
     }
-    .status-dot.ok      { background: var(--teal);  animation: none; }
-    .status-dot.err     { background: var(--red);   animation: none; }
-    .status-dot.offline { background: var(--red);   animation: none; }
+
+    .status-dot.ok {
+      background: var(--teal);
+      animation: none;
+    }
+
+    .status-dot.err {
+      background: var(--red);
+      animation: none;
+    }
+
+    .status-dot.offline {
+      background: var(--red);
+      animation: none;
+    }
+
     .status-dot.load,
     .status-dot.warn {
       background: var(--amber);
@@ -66,8 +87,15 @@
     }
 
     @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50%       { opacity: 0.3; }
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.3;
+      }
     }
 
     .status-text {
@@ -97,8 +125,14 @@
       text-align: right;
       transition: color 0.3s;
     }
-    .countdown.warn { color: var(--amber); }
-    .countdown.err  { color: var(--red); }
+
+    .countdown.warn {
+      color: var(--amber);
+    }
+
+    .countdown.err {
+      color: var(--red);
+    }
 
     /* CSV button */
     .btn-csv {
@@ -112,10 +146,12 @@
       font-family: inherit;
       transition: border-color 0.15s, color 0.15s;
     }
+
     .btn-csv:hover:not(:disabled) {
       border-color: var(--teal);
       color: var(--teal);
     }
+
     .btn-csv:disabled {
       opacity: 0.35;
       cursor: default;
@@ -140,8 +176,16 @@
       font-family: inherit;
       transition: border-color 0.15s, color 0.15s;
     }
-    .range-bar button:hover { border-color: var(--blue); color: var(--text); }
-    .range-bar button.active { border-color: var(--blue); color: var(--blue); }
+
+    .range-bar button:hover {
+      border-color: var(--blue);
+      color: var(--text);
+    }
+
+    .range-bar button.active {
+      border-color: var(--blue);
+      color: var(--blue);
+    }
 
     /* ── Cards ── */
     .cards {
@@ -165,6 +209,7 @@
     .card[data-target] {
       cursor: pointer;
     }
+
     .card[data-target]:hover {
       border-color: var(--blue);
       transform: translateY(-2px);
@@ -182,18 +227,50 @@
       font-size: 2rem;
       font-weight: 700;
       line-height: 1;
-      position: relative;  /* needed for skeleton ::after */
+      position: relative;
+      /* needed for skeleton ::after */
     }
-    .card-value.amber   { color: var(--amber); }
-    .card-value.blue    { color: var(--blue); }
-    .card-value.teal    { color: var(--teal); }
-    .card-value.violet  { color: var(--violet); }
-    .card-value.muted   { color: var(--text); font-size: 1.1rem; line-height: 1.3; }
-    .card-value.comfort { color: var(--text); font-size: 1.25rem; line-height: 1.25; }
+
+    .card-value.amber {
+      color: var(--amber);
+    }
+
+    .card-value.blue {
+      color: var(--blue);
+    }
+
+    .card-value.teal {
+      color: var(--teal);
+    }
+
+    .card-value.violet {
+      color: var(--violet);
+    }
+
+    .card-value.muted {
+      color: var(--text);
+      font-size: 1.1rem;
+      line-height: 1.3;
+    }
+
+    .card-value.comfort {
+      color: var(--text);
+      font-size: 1.25rem;
+      line-height: 1.25;
+    }
+
     /* Tendency value colour set dynamically via JS */
-    .card-value.pos { color: var(--teal); }
-    .card-value.neg { color: var(--amber); }
-    .card-value.flat{ color: var(--muted); }
+    .card-value.pos {
+      color: var(--teal);
+    }
+
+    .card-value.neg {
+      color: var(--amber);
+    }
+
+    .card-value.flat {
+      color: var(--muted);
+    }
 
     /* Trend row */
     .card-trend {
@@ -201,45 +278,61 @@
       margin-top: 5px;
       min-height: 1.2em;
     }
-    .trend-up   { color: var(--green); }
-    .trend-down { color: var(--red); }
-    .trend-flat { color: var(--muted); }
+
+    .trend-up {
+      color: var(--green);
+    }
+
+    .trend-down {
+      color: var(--red);
+    }
+
+    .trend-flat {
+      color: var(--muted);
+    }
 
     .card-sub {
       font-size: 0.75rem;
       color: var(--muted);
       margin-top: 4px;
-      position: relative;  /* needed for skeleton ::after */
+      position: relative;
+      /* needed for skeleton ::after */
     }
 
     /* ── Skeleton shimmer ── */
     @keyframes shimmer {
-      0%   { background-position: -400px 0; }
-      100% { background-position:  400px 0; }
+      0% {
+        background-position: -400px 0;
+      }
+
+      100% {
+        background-position: 400px 0;
+      }
     }
 
     /* When card is loading, overlay value & sub with shimmer */
     .card.is-loading .card-value {
       color: transparent !important;
     }
+
     .card.is-loading .card-value::after,
     .card.is-loading .card-sub::after {
       content: '';
       position: absolute;
       inset: 0;
       border-radius: 4px;
-      background: linear-gradient(
-        90deg,
-        var(--border)     25%,
-        var(--surface-hi) 50%,
-        var(--border)     75%
-      );
+      background: linear-gradient(90deg,
+          var(--border) 25%,
+          var(--surface-hi) 50%,
+          var(--border) 75%);
       background-size: 400px 100%;
       animation: shimmer 1.5s infinite;
     }
+
     .card.is-loading .card-sub {
       color: transparent !important;
     }
+
     .card.is-loading .card-trend {
       visibility: hidden;
     }
@@ -278,7 +371,9 @@
     }
 
     @media (min-width: 640px) {
-      .chart-card canvas { height: 200px !important; }
+      .chart-card canvas {
+        height: 200px !important;
+      }
     }
 
     /* ── Empty / Error ── */
@@ -303,9 +398,14 @@
       display: inline-block;
       transition: border-color 0.15s, color 0.15s;
     }
-    .btn-retry:hover { border-color: var(--teal); color: var(--teal); }
+
+    .btn-retry:hover {
+      border-color: var(--teal);
+      color: var(--teal);
+    }
   </style>
 </head>
+
 <body>
 
   <header>
@@ -321,7 +421,7 @@
   </header>
 
   <div class="range-bar">
-    <button data-h="24"  class="active">24h</button>
+    <button data-h="24" class="active">24h</button>
     <button data-h="48">48h</button>
     <button data-h="168">7 dni</button>
     <button data-h="720">30 dni</button>
@@ -333,24 +433,24 @@
       <div class="card-label">Temperatura</div>
       <div class="card-value amber" id="cardTemp">—</div>
       <div class="card-trend" id="trendTemp"></div>
-      <div class="card-sub"   id="cardTempSub">min — · max —</div>
+      <div class="card-sub" id="cardTempSub">min — · max —</div>
     </div>
     <div class="card is-loading" data-target="chartHum">
       <div class="card-label">Wilgotność</div>
       <div class="card-value blue" id="cardHum">—</div>
       <div class="card-trend" id="trendHum"></div>
-      <div class="card-sub"   id="cardHumSub">min — · max —</div>
+      <div class="card-sub" id="cardHumSub">min — · max —</div>
     </div>
     <div class="card is-loading" data-target="chartPres">
       <div class="card-label">Ciśnienie</div>
       <div class="card-value teal" id="cardPres">—</div>
       <div class="card-trend" id="trendPres"></div>
-      <div class="card-sub"   id="cardPresSub">min — · max —</div>
+      <div class="card-sub" id="cardPresSub">min — · max —</div>
     </div>
     <div class="card is-loading">
       <div class="card-label">Ostatni sync</div>
       <div class="card-value muted" id="cardSync">—</div>
-      <div class="card-sub"  id="cardCount">— odczytów</div>
+      <div class="card-sub" id="cardCount">— odczytów</div>
     </div>
     <div class="card is-loading">
       <div class="card-label">Punkt rosy</div>
@@ -393,10 +493,10 @@
     /* ═══════════════════════════════════════════════
        CONFIG
     ═══════════════════════════════════════════════ */
-    const SUPABASE_URL      = 'https://izudnxavhfuuxdnyckdh.supabase.co';
+    const SUPABASE_URL = 'https://izudnxavhfuuxdnyckdh.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_DyhhWHN83GulCQ70SyQVww_zTSqLJ3l';
-    const TABLE             = 'readings';
-    const REFRESH_MS        = 5 * 60 * 1000;
+    const TABLE = 'readings';
+    const REFRESH_MS = 5 * 60 * 1000;
 
     /* ═══════════════════════════════════════════════
        HELPERS
@@ -404,9 +504,9 @@
     function setStatus(state) {
       document.getElementById('statusDot').className = 'status-dot ' + state;
       document.getElementById('statusText').textContent =
-        state === 'load' ? 'Ładowanie…'       :
-        state === 'ok'   ? 'Połączono'        :
-                           'Błąd połączenia';
+        state === 'load' ? 'Ładowanie…' :
+          state === 'ok' ? 'Połączono' :
+            'Błąd połączenia';
     }
 
     function formatTime(iso, hours) {
@@ -414,7 +514,7 @@
       if (hours <= 48)
         return d.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
       return d.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' })
-           + ' ' + d.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+        + ' ' + d.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
     }
 
     function minmax(arr) {
@@ -424,8 +524,8 @@
     // Returns HTML string for the trend indicator
     function trendHtml(first, last, unit) {
       const diff = parseFloat((last - first).toFixed(1));
-      const abs  = Math.abs(diff).toFixed(1);
-      if (diff > 0.05)  return `<span class="trend-up">↑ +${abs} ${unit}</span>`;
+      const abs = Math.abs(diff).toFixed(1);
+      if (diff > 0.05) return `<span class="trend-up">↑ +${abs} ${unit}</span>`;
       if (diff < -0.05) return `<span class="trend-down">↓ −${abs} ${unit}</span>`;
       return `<span class="trend-flat">→ bez zmian</span>`;
     }
@@ -440,22 +540,22 @@
     /* ── Tendencja ciśnienia (Δ względem ~3h temu) ── */
     function pressureTendency(rows) {
       if (rows.length < 2) return null;
-      const last     = rows[rows.length - 1];
+      const last = rows[rows.length - 1];
       const lastTime = new Date(last.recorded_at).getTime();
-      const target   = lastTime - 3 * 3600 * 1000;
+      const target = lastTime - 3 * 3600 * 1000;
       let ref = rows[0], bestDiff = Infinity;
       for (const r of rows) {
         const d = Math.abs(new Date(r.recorded_at).getTime() - target);
         if (d < bestDiff) { bestDiff = d; ref = r; }
       }
-      const delta   = parseFloat((last.pressure_hpa - ref.pressure_hpa).toFixed(1));
-      const spanH   = ((lastTime - new Date(ref.recorded_at).getTime()) / 3600000).toFixed(1);
+      const delta = parseFloat((last.pressure_hpa - ref.pressure_hpa).toFixed(1));
+      const spanH = ((lastTime - new Date(ref.recorded_at).getTime()) / 3600000).toFixed(1);
       return { delta, spanH };
     }
 
     function tendencyLabel(delta) {
-      if (delta >  3) return 'szybka poprawa pogody';
-      if (delta >  1) return 'coraz lepsza pogoda';
+      if (delta > 3) return 'szybka poprawa pogody';
+      if (delta > 1) return 'coraz lepsza pogoda';
       if (delta > -1) return 'stabilne';
       if (delta > -3) return 'front nadchodzi';
       return 'gwałtowne pogorszenie';
@@ -463,21 +563,21 @@
 
     /* ── Komfort cieplny ── */
     function comfortIndex(T, RH) {
-      if (T <= 0)               return { e: '❄️',  l: 'Mróz' };
-      if (T <= 10)              return { e: '🧊',  l: 'Zimno' };
-      if (T <= 20 && RH <= 70) return { e: '✅',  l: 'Komfortowo' };
-      if (T <= 20)              return { e: '💧',  l: 'Chłodno i wilgotno' };
-      if (T <= 26 && RH <= 60) return { e: '☀️',  l: 'Przyjemnie ciepło' };
-      if (T <= 26)              return { e: '😰',  l: 'Duszno' };
+      if (T <= 0) return { e: '❄️', l: 'Mróz' };
+      if (T <= 10) return { e: '🧊', l: 'Zimno' };
+      if (T <= 20 && RH <= 70) return { e: '✅', l: 'Komfortowo' };
+      if (T <= 20) return { e: '💧', l: 'Chłodno i wilgotno' };
+      if (T <= 26 && RH <= 60) return { e: '☀️', l: 'Przyjemnie ciepło' };
+      if (T <= 26) return { e: '😰', l: 'Duszno' };
       if (T <= 32 && RH <= 50) return { e: '🌡️', l: 'Gorąco' };
-      return                         { e: '🔥',  l: 'Gorąco i duszno' };
+      return { e: '🔥', l: 'Gorąco i duszno' };
     }
 
     /* ═══════════════════════════════════════════════
        CHARTS — gradient fill + styled tooltip
     ═══════════════════════════════════════════════ */
     function gradientFn(hexColor) {
-      return function(context) {
+      return function (context) {
         const { ctx, chartArea } = context.chart;
         if (!chartArea) return hexColor + '20';
         const g = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
@@ -513,12 +613,12 @@
             legend: { display: false },
             tooltip: {
               backgroundColor: '#1a1d27',
-              borderColor:     '#2a2d3a',
-              borderWidth:     1,
-              titleColor:      '#8892a4',
-              bodyColor:       '#e2e8f0',
-              padding:         10,
-              displayColors:   false,
+              borderColor: '#2a2d3a',
+              borderWidth: 1,
+              titleColor: '#8892a4',
+              bodyColor: '#e2e8f0',
+              padding: 10,
+              displayColors: false,
               callbacks: {
                 label: (ctx) => ` ${ctx.parsed.y} ${unit}`,
               },
@@ -527,11 +627,11 @@
           scales: {
             x: {
               ticks: { maxTicksLimit: 8, color: '#8892a4', font: { size: 11 } },
-              grid:  { color: '#2a2d3a' },
+              grid: { color: '#2a2d3a' },
             },
             y: {
               ticks: { maxTicksLimit: 5, color: '#8892a4', font: { size: 11 } },
-              grid:  { color: '#2a2d3a' },
+              grid: { color: '#2a2d3a' },
             },
           },
         },
@@ -540,7 +640,7 @@
 
     const charts = {
       temp: makeChart('chartTemp', '#f59e0b', '°C'),
-      hum:  makeChart('chartHum',  '#4f8ef7', '%'),
+      hum: makeChart('chartHum', '#4f8ef7', '%'),
       pres: makeChart('chartPres', '#2dd4bf', 'hPa'),
     };
 
@@ -557,24 +657,24 @@
     ═══════════════════════════════════════════════ */
     // recorded_at (ms) of the last row returned by Supabase
     let lastDataTimestamp = null;
-    let isLoading         = false;
-    let lastFetchOk       = false;
-    let countdownId       = null;
-    let earlyFetchDone    = false;  // fetch 60s przed końcem
-    let lateFetchDone     = false;  // fetch 3s po końcu
+    let isLoading = false;
+    let lastFetchOk = false;
+    let countdownId = null;
+    let earlyFetchDone = false;  // fetch 60s przed końcem
+    let lateFetchDone = false;  // fetch 3s po końcu
 
     const DATA_EXPECT_MS = 5 * 60 * 1000;
-    const OFFLINE_MS     = 6 * 60 * 1000;
-    const EARLY_TRIGGER  = 60 * 1000;   // 60s przed
-    const LATE_TRIGGER   = -3 * 1000;   // 3s po
+    const OFFLINE_MS = 6 * 60 * 1000;
+    const EARLY_TRIGGER = 60 * 1000;   // 60s przed
+    const LATE_TRIGGER = -3 * 1000;   // 3s po
 
     function updateDataFreshness() {
-      const el  = document.getElementById('countdown');
+      const el = document.getElementById('countdown');
       const dot = document.getElementById('statusDot');
 
       if (isLoading || !lastDataTimestamp) { el.textContent = ''; return; }
 
-      const age       = Date.now() - lastDataTimestamp;
+      const age = Date.now() - lastDataTimestamp;
       const remaining = DATA_EXPECT_MS - age;
 
       // ── Zsynchronizowane fetche ──
@@ -593,19 +693,19 @@
         const m = Math.floor(remaining / 60000).toString().padStart(2, '0');
         const s = Math.floor((remaining % 60000) / 1000).toString().padStart(2, '0');
         el.textContent = `Następne dane za ${m}:${s}`;
-        el.className   = 'countdown';
+        el.className = 'countdown';
         if (lastFetchOk) dot.className = 'status-dot ok';
       } else if (age < OFFLINE_MS) {
         el.textContent = 'Oczekiwanie na aktualne dane…';
-        el.className   = 'countdown warn';
-        dot.className  = 'status-dot warn';
+        el.className = 'countdown warn';
+        dot.className = 'status-dot warn';
       } else {
         const lastTime = new Date(lastDataTimestamp).toLocaleTimeString('pl-PL', {
           hour: '2-digit', minute: '2-digit', second: '2-digit',
         });
         el.textContent = `Urządzenie offline · ostatni odczyt ${lastTime}`;
-        el.className   = 'countdown err';
-        dot.className  = 'status-dot offline';
+        el.className = 'countdown err';
+        dot.className = 'status-dot offline';
       }
     }
 
@@ -618,64 +718,64 @@
       currentRows = rows;
 
       const labels = rows.map(r => formatTime(r.recorded_at, hours));
-      const temps  = rows.map(r => r.temp_c);
-      const hums   = rows.map(r => r.humidity_pct);
-      const press  = rows.map(r => r.pressure_hpa);
+      const temps = rows.map(r => r.temp_c);
+      const hums = rows.map(r => r.humidity_pct);
+      const press = rows.map(r => r.pressure_hpa);
 
       // Update charts
       [['temp', temps], ['hum', hums], ['pres', press]].forEach(([key, data]) => {
-        charts[key].data.labels             = labels;
-        charts[key].data.datasets[0].data   = data;
+        charts[key].data.labels = labels;
+        charts[key].data.datasets[0].data = data;
         charts[key].update();
       });
 
       const first = rows[0];
-      const last  = rows[rows.length - 1];
+      const last = rows[rows.length - 1];
 
       // Store freshest data point timestamp for offline detection
       lastDataTimestamp = new Date(last.recorded_at).getTime();
-      earlyFetchDone    = false;
-      lateFetchDone     = false;
+      earlyFetchDone = false;
+      lateFetchDone = false;
 
       // Current values
-      document.getElementById('cardTemp').textContent  = `${last.temp_c} °C`;
-      document.getElementById('cardHum').textContent   = `${last.humidity_pct} %`;
-      document.getElementById('cardPres').textContent  = `${last.pressure_hpa} hPa`;
+      document.getElementById('cardTemp').textContent = `${last.temp_c} °C`;
+      document.getElementById('cardHum').textContent = `${last.humidity_pct} %`;
+      document.getElementById('cardPres').textContent = `${last.pressure_hpa} hPa`;
 
       const syncTime = new Date(last.recorded_at).toLocaleTimeString('pl-PL', {
         hour: '2-digit', minute: '2-digit', second: '2-digit',
       });
-      document.getElementById('cardSync').textContent  = syncTime;
+      document.getElementById('cardSync').textContent = syncTime;
       document.getElementById('cardCount').textContent = `${rows.length} odczytów`;
 
       // Trend arrows
-      document.getElementById('trendTemp').innerHTML = trendHtml(first.temp_c,       last.temp_c,       '°C');
-      document.getElementById('trendHum').innerHTML  = trendHtml(first.humidity_pct, last.humidity_pct, '%');
+      document.getElementById('trendTemp').innerHTML = trendHtml(first.temp_c, last.temp_c, '°C');
+      document.getElementById('trendHum').innerHTML = trendHtml(first.humidity_pct, last.humidity_pct, '%');
       document.getElementById('trendPres').innerHTML = trendHtml(first.pressure_hpa, last.pressure_hpa, 'hPa');
 
       // Min/max subtitles
       const mm = { t: minmax(temps), h: minmax(hums), p: minmax(press) };
-      document.getElementById('cardTempSub').textContent  = `min ${mm.t.min} · max ${mm.t.max} °C`;
-      document.getElementById('cardHumSub').textContent   = `min ${mm.h.min} · max ${mm.h.max} %`;
-      document.getElementById('cardPresSub').textContent  = `min ${mm.p.min} · max ${mm.p.max} hPa`;
+      document.getElementById('cardTempSub').textContent = `min ${mm.t.min} · max ${mm.t.max} °C`;
+      document.getElementById('cardHumSub').textContent = `min ${mm.h.min} · max ${mm.h.max} %`;
+      document.getElementById('cardPresSub').textContent = `min ${mm.p.min} · max ${mm.p.max} hPa`;
 
       // ── Punkt rosy ──
       const dew = dewPoint(last.temp_c, last.humidity_pct);
       document.getElementById('cardDew').textContent = `${dew} °C`;
       const dewDiff = parseFloat((last.temp_c - dew).toFixed(1));
       document.getElementById('cardDewSub').textContent =
-        dewDiff <= 2  ? '⚠️ Ryzyko mgły / kondensacji' :
-        dew   >= 20   ? '💧 Duszno (rosa wysoka)'      :
-                        `${dewDiff} °C poniżej temp.`;
+        dewDiff <= 2 ? '⚠️ Ryzyko mgły / kondensacji' :
+          dew >= 20 ? '💧 Duszno (rosa wysoka)' :
+            `${dewDiff} °C poniżej temp.`;
 
       // ── Tendencja ciśnienia ──
       const tend = pressureTendency(rows);
       if (tend) {
         const sign = tend.delta > 0 ? '+' : '';
-        const cls  = tend.delta >  1 ? 'pos' : tend.delta < -1 ? 'neg' : 'flat';
-        const el   = document.getElementById('cardTend');
+        const cls = tend.delta > 1 ? 'pos' : tend.delta < -1 ? 'neg' : 'flat';
+        const el = document.getElementById('cardTend');
         el.textContent = `${sign}${tend.delta} hPa`;
-        el.className   = `card-value ${cls}`;
+        el.className = `card-value ${cls}`;
         document.getElementById('cardTendSub').textContent =
           `${tendencyLabel(tend.delta)} · ${tend.spanH}h`;
       }
@@ -704,15 +804,15 @@
       setLoading(true);
 
       const since = new Date(Date.now() - hours * 3600 * 1000).toISOString();
-      const url   = `${SUPABASE_URL}/rest/v1/${TABLE}`
-                  + `?recorded_at=gte.${since}`
-                  + `&order=recorded_at.asc`
-                  + `&select=recorded_at,temp_c,pressure_hpa,humidity_pct`;
+      const url = `${SUPABASE_URL}/rest/v1/${TABLE}`
+        + `?recorded_at=gte.${since}`
+        + `&order=recorded_at.asc`
+        + `&select=recorded_at,temp_c,pressure_hpa,humidity_pct`;
 
       try {
         const res = await fetch(url, {
           headers: {
-            apikey:        SUPABASE_ANON_KEY,
+            apikey: SUPABASE_ANON_KEY,
             Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
           },
         });
@@ -720,7 +820,7 @@
         const rows = await res.json();
 
         lastFetchOk = true;
-        isLoading   = false;
+        isLoading = false;
         setLoading(false);
 
         if (!rows.length) {
@@ -734,7 +834,7 @@
         updateDataFreshness();   // paint countdown immediately after render
       } catch (e) {
         lastFetchOk = false;
-        isLoading   = false;
+        isLoading = false;
         setLoading(false);
         setStatus('err');
         document.getElementById('empty').style.display = 'block';
@@ -746,12 +846,12 @@
        INTERVAL + RANGE BUTTONS
     ═══════════════════════════════════════════════ */
     let activeHours = 24;
-    let timerId     = null;
+    let timerId = null;
 
     function startInterval() {
       clearInterval(timerId);
       clearInterval(countdownId);
-      timerId     = setInterval(() => loadData(activeHours), REFRESH_MS);
+      timerId = setInterval(() => loadData(activeHours), REFRESH_MS);
       countdownId = setInterval(updateDataFreshness, 1000);
     }
 
@@ -783,13 +883,13 @@
     document.getElementById('btnCsv').addEventListener('click', () => {
       if (!currentRows.length) return;
       const header = 'Czas,Temperatura (°C),Wilgotność (%),Ciśnienie (hPa)';
-      const lines  = currentRows.map(r =>
+      const lines = currentRows.map(r =>
         `${r.recorded_at},${r.temp_c},${r.humidity_pct},${r.pressure_hpa}`
       );
       const blob = new Blob([header + '\n' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href     = url;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
       a.download = `stacja_${new Date().toISOString().slice(0, 10)}_${activeHours}h.csv`;
       a.click();
       URL.revokeObjectURL(url);
@@ -810,4 +910,5 @@
     startInterval();
   </script>
 </body>
+
 </html>
