@@ -732,6 +732,77 @@
     }
 
     /* ═══════════════════════════════════════════════
+       WEATHER BANDS PLUGIN
+    ═══════════════════════════════════════════════ */
+    /* Kolor pasa dla danego kodu WMO (null = brak pasa) */
+    function weatherBandColor(code) {
+      if (code == null) return null;
+      if (code <= 2)  return 'rgba(251,191,36,0.13)';   // ☀️ słonecznie
+      if (code <= 48) return null;                        // ☁️ chmury/mgła — bez pasa
+      if (code <= 82) return 'rgba(59,130,246,0.13)';   // 🌧️ deszcz/mżawka
+      if (code <= 86) return 'rgba(186,230,253,0.15)';  // ❄️ śnieg
+      return 'rgba(139,92,246,0.15)';                    // ⛈️ burza
+    }
+
+    /* Grupuje tablicę kodów w bloki {startIdx, endIdx, color} */
+    function computeBands(codes) {
+      const bands = [];
+      let i = 0;
+      while (i < codes.length) {
+        const color = weatherBandColor(codes[i]);
+        if (color) {
+          let j = i + 1;
+          while (j < codes.length && weatherBandColor(codes[j]) === color) j++;
+          bands.push({ startIdx: i, endIdx: j - 1, color });
+          i = j;
+        } else {
+          i++;
+        }
+      }
+      return bands;
+    }
+
+    /* Dla każdego indoor-wiersza zwraca najbliższy outdoor-wpis (O(n) dzięki mapie) */
+    function matchOutdoor(indoorRows) {
+      if (!outdoorRows.length) return indoorRows.map(() => null);
+      const lookup = new Map(outdoorRows.map(oh => [new Date(oh.time).getTime(), oh]));
+      return indoorRows.map(row => {
+        const hourTs = Math.floor(new Date(row.recorded_at).getTime() / 3600000) * 3600000;
+        return lookup.get(hourTs) || null;
+      });
+    }
+
+    /* Rysuje kolorowe pasy w tle wykresu na podstawie options.plugins.weatherBands */
+    Chart.register({
+      id: 'weatherBands',
+      beforeDraw(chart) {
+        const bands = chart.options.plugins.weatherBands;
+        if (!bands || !bands.length) return;
+        const { ctx, chartArea, scales } = chart;
+        if (!chartArea) return;
+        const xScale = scales.x;
+        const labels = chart.data.labels;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(chartArea.left, chartArea.top,
+          chartArea.right - chartArea.left, chartArea.bottom - chartArea.top);
+        ctx.clip();
+        for (const b of bands) {
+          // Rozciągamy pas od lewej krawędzi słupka startIdx do prawej krawędzi endIdx
+          const x1 = b.startIdx === 0
+            ? chartArea.left
+            : xScale.getPixelForValue(b.startIdx - 0.5);
+          const x2 = b.endIdx >= labels.length - 1
+            ? chartArea.right
+            : xScale.getPixelForValue(b.endIdx + 0.5);
+          ctx.fillStyle = b.color;
+          ctx.fillRect(x1, chartArea.top, x2 - x1, chartArea.bottom - chartArea.top);
+        }
+        ctx.restore();
+      },
+    });
+
+    /* ═══════════════════════════════════════════════
        CHARTS — gradient fill + styled tooltip
     ═══════════════════════════════════════════════ */
     function gradientFn(hexColor) {
@@ -1005,10 +1076,14 @@
       const hums = rows.map(r => r.humidity_pct);
       const press = rows.map(r => r.pressure_hpa);
 
-      // Update charts
+      // Update charts (dołącz pasma pogody jeśli outdoor już załadowany)
+      const indoorBands = outdoorRows.length
+        ? computeBands(matchOutdoor(rows).map(oh => oh ? oh.code : null))
+        : null;
       [['temp', temps], ['hum', hums], ['pres', press]].forEach(([key, data]) => {
         charts[key].data.labels = labels;
         charts[key].data.datasets[0].data = data;
+        if (indoorBands && key !== 'pres') charts[key].options.plugins.weatherBands = indoorBands;
         charts[key].update();
       });
 
@@ -1198,12 +1273,16 @@
           trendHtml(filtered[0].humidity, filtered[filtered.length - 1].humidity, '%');
 
         const outLabels = filtered.map(r => formatTime(r.time, hours));
+        const outBands = computeBands(filtered.map(r => r.code));
+
         charts.outTemp.data.labels = outLabels;
         charts.outTemp.data.datasets[0].data = temps;
+        charts.outTemp.options.plugins.weatherBands = outBands;
         charts.outTemp.update();
 
         charts.outHum.data.labels = outLabels;
         charts.outHum.data.datasets[0].data = hums;
+        charts.outHum.options.plugins.weatherBands = outBands;
         charts.outHum.update();
       }
 
@@ -1224,6 +1303,15 @@
           `wew. ${lastIn}°C · zew. ${closest.temp.toFixed(1)}°C`;
       }
 
+      // Jeśli indoor już załadowany — domaluj pasma na wykresach wewnętrznych
+      if (currentRows.length > 0) {
+        const indoorBands = computeBands(matchOutdoor(currentRows).map(oh => oh ? oh.code : null));
+        charts.temp.options.plugins.weatherBands = indoorBands;
+        charts.temp.update();
+        charts.hum.options.plugins.weatherBands = indoorBands;
+        charts.hum.update();
+      }
+
       setOutdoorLoading(false);
       updateOverlayChart(currentRows, hours);
       updateOverlayHumChart(currentRows, hours);
@@ -1232,23 +1320,16 @@
     function updateOverlayChart(indoorRows, hours) {
       if (!outdoorRows.length || !indoorRows.length) return;
 
+      const matched = matchOutdoor(indoorRows);
       const labels = indoorRows.map(r => formatTime(r.recorded_at, hours));
       const indoorTemps = indoorRows.map(r => parseFloat(r.temp_c));
-
-      // Dopasuj najbliższy outdoor odczyt godzinowy do każdego indoor punktu
-      const outdoorTemps = indoorRows.map(row => {
-        const ts = new Date(row.recorded_at).getTime();
-        let closest = null, minDiff = Infinity;
-        for (const oh of outdoorRows) {
-          const d = Math.abs(new Date(oh.time).getTime() - ts);
-          if (d < minDiff) { minDiff = d; closest = oh; }
-        }
-        return closest ? parseFloat(closest.temp.toFixed(1)) : null;
-      });
+      const outdoorTemps = matched.map(oh => oh ? parseFloat(oh.temp.toFixed(1)) : null);
+      const bands = computeBands(matched.map(oh => oh ? oh.code : null));
 
       overlayChart.data.labels = labels;
       overlayChart.data.datasets[0].data = indoorTemps;
       overlayChart.data.datasets[1].data = outdoorTemps;
+      overlayChart.options.plugins.weatherBands = bands;
       overlayChart.update();
       document.getElementById('overlayCard').classList.remove('is-loading');
     }
@@ -1256,21 +1337,16 @@
     function updateOverlayHumChart(indoorRows, hours) {
       if (!outdoorRows.length || !indoorRows.length) return;
 
+      const matched = matchOutdoor(indoorRows);
       const labels = indoorRows.map(r => formatTime(r.recorded_at, hours));
       const indoorHums = indoorRows.map(r => parseFloat(r.humidity_pct));
-      const outdoorHums = indoorRows.map(row => {
-        const ts = new Date(row.recorded_at).getTime();
-        let closest = null, minDiff = Infinity;
-        for (const oh of outdoorRows) {
-          const d = Math.abs(new Date(oh.time).getTime() - ts);
-          if (d < minDiff) { minDiff = d; closest = oh; }
-        }
-        return closest ? closest.humidity : null;
-      });
+      const outdoorHums = matched.map(oh => oh ? oh.humidity : null);
+      const bands = computeBands(matched.map(oh => oh ? oh.code : null));
 
       overlayHumChart.data.labels = labels;
       overlayHumChart.data.datasets[0].data = indoorHums;
       overlayHumChart.data.datasets[1].data = outdoorHums;
+      overlayHumChart.options.plugins.weatherBands = bands;
       overlayHumChart.update();
       document.getElementById('overlayHumCard').classList.remove('is-loading');
     }
