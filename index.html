@@ -733,9 +733,12 @@
       const last = rows[rows.length - 1];
 
       // Store freshest data point timestamp for offline detection
-      lastDataTimestamp = new Date(last.recorded_at).getTime();
-      earlyFetchDone = false;
-      lateFetchDone = false;
+      const newTs = new Date(last.recorded_at).getTime();
+      if (newTs !== lastDataTimestamp) {
+        lastDataTimestamp = newTs;
+        earlyFetchDone = false;
+        lateFetchDone = false;
+      }
 
       // Current values
       document.getElementById('cardTemp').textContent = `${last.temp_c} °C`;
