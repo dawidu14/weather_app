@@ -452,6 +452,41 @@
       margin-top: 4px;
     }
 
+    /* ── Bands legend (global) ── */
+    .bands-legend {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 14px;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    .bands-legend-label {
+      color: var(--muted);
+      opacity: 0.7;
+    }
+
+    .bands-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .bl-swatch {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+
+    .bl-swatch--cloud {
+      background: var(--surface-hi);
+      border: 1px solid var(--border);
+    }
+
     /* ── Chart legend (overlay) ── */
     .chart-legend {
       display: flex;
@@ -572,6 +607,15 @@
   <div id="empty">
     <p>Brak danych dla wybranego zakresu czasu.</p>
     <button class="btn-retry" id="btnRetry">↺ Spróbuj ponownie</button>
+  </div>
+
+  <div class="bands-legend">
+    <span class="bands-legend-label">Tło wykresów:</span>
+    <span class="bands-legend-item"><span class="bl-swatch" style="background:rgba(251,191,36,0.45)"></span>Słonecznie</span>
+    <span class="bands-legend-item"><span class="bl-swatch bl-swatch--cloud"></span>Zachmurzenie</span>
+    <span class="bands-legend-item"><span class="bl-swatch" style="background:rgba(59,130,246,0.45)"></span>Deszcz</span>
+    <span class="bands-legend-item"><span class="bl-swatch" style="background:rgba(186,230,253,0.55)"></span>Śnieg</span>
+    <span class="bands-legend-item"><span class="bl-swatch" style="background:rgba(139,92,246,0.45)"></span>Burza</span>
   </div>
 
   <div class="charts">
