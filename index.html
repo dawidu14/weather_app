@@ -807,9 +807,11 @@
       setLoading(true);
 
       const since = new Date(Date.now() - hours * 3600 * 1000).toISOString();
+      const maxRows = hours <= 48 ? 576 : hours <= 168 ? 2016 : 8640;
       const url = `${SUPABASE_URL}/rest/v1/${TABLE}`
         + `?recorded_at=gte.${since}`
-        + `&order=recorded_at.asc`
+        + `&order=recorded_at.desc`
+        + `&limit=${maxRows}`
         + `&select=recorded_at,temp_c,pressure_hpa,humidity_pct`;
 
       try {
@@ -817,10 +819,12 @@
           headers: {
             apikey: SUPABASE_ANON_KEY,
             Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+            'Range-Unit': 'items',
+            Range: `0-${maxRows - 1}`,
           },
         });
         if (!res.ok) throw new Error(res.status);
-        const rows = await res.json();
+        const rows = (await res.json()).reverse();
 
         lastFetchOk = true;
         isLoading = false;
