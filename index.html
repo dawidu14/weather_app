@@ -599,6 +599,18 @@
       </div>
       <canvas id="chartOverlay"></canvas>
     </div>
+    <div class="chart-card outdoor is-loading">
+      <div class="chart-title">Wilgotność zewnętrzna (%)</div>
+      <canvas id="chartOutHum"></canvas>
+    </div>
+    <div class="chart-card outdoor is-loading" id="overlayHumCard">
+      <div class="chart-title">Wilgotność: wewnątrz vs zewnątrz (%)</div>
+      <div class="chart-legend">
+        <span><span class="legend-dot" style="background:#4f8ef7"></span>Wewnątrz</span>
+        <span><span class="legend-dot" style="background:#a78bfa"></span>Zewnątrz (godzinowo)</span>
+      </div>
+      <canvas id="chartOverlayHum"></canvas>
+    </div>
   </div>
 
   <script>
@@ -789,6 +801,7 @@
       hum: makeChart('chartHum', '#4f8ef7', '%'),
       pres: makeChart('chartPres', '#2dd4bf', 'hPa'),
       outTemp: makeChart('chartOutTemp', '#60a5fa', '°C'),
+      outHum: makeChart('chartOutHum', '#a78bfa', '%'),
     };
 
     /* Overlay chart — dwa datasety bez wypełnienia */
@@ -848,6 +861,64 @@
           ],
         },
         options: baseOpts,
+      });
+    })();
+
+    const overlayHumChart = (() => {
+      const ctx = document.getElementById('chartOverlayHum').getContext('2d');
+      return new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: 'Wewnątrz',
+              data: [],
+              borderColor: '#4f8ef7',
+              backgroundColor: 'transparent',
+              borderWidth: 2,
+              pointRadius: 0,
+              pointHoverRadius: 4,
+              tension: 0.3,
+            },
+            {
+              label: 'Zewnątrz',
+              data: [],
+              borderColor: '#a78bfa',
+              backgroundColor: 'transparent',
+              borderWidth: 2,
+              borderDash: [5, 3],
+              pointRadius: 0,
+              pointHoverRadius: 4,
+              tension: 0.3,
+            },
+          ],
+        },
+        options: {
+          animation: false,
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              display: true,
+              labels: { color: '#8892a4', font: { size: 11 }, boxWidth: 20, boxHeight: 2, padding: 16 },
+            },
+            tooltip: {
+              backgroundColor: '#1a1d27',
+              borderColor: '#2a2d3a',
+              borderWidth: 1,
+              titleColor: '#8892a4',
+              bodyColor: '#e2e8f0',
+              padding: 10,
+              callbacks: { label: (c) => ` ${c.dataset.label}: ${c.parsed.y} %` },
+            },
+          },
+          scales: {
+            x: { ticks: { maxTicksLimit: 8, color: '#8892a4', font: { size: 11 } }, grid: { color: '#2a2d3a' } },
+            y: { ticks: { maxTicksLimit: 5, color: '#8892a4', font: { size: 11 } }, grid: { color: '#2a2d3a' } },
+          },
+        },
       });
     })();
 
@@ -1010,6 +1081,7 @@
       document.getElementById('empty').style.display = 'none';
 
       updateOverlayChart(rows, hours);
+      updateOverlayHumChart(rows, hours);
     }
 
     /* ═══════════════════════════════════════════════
@@ -1125,9 +1197,14 @@
         document.getElementById('trendOutHum').innerHTML =
           trendHtml(filtered[0].humidity, filtered[filtered.length - 1].humidity, '%');
 
-        charts.outTemp.data.labels = filtered.map(r => formatTime(r.time, hours));
+        const outLabels = filtered.map(r => formatTime(r.time, hours));
+        charts.outTemp.data.labels = outLabels;
         charts.outTemp.data.datasets[0].data = temps;
         charts.outTemp.update();
+
+        charts.outHum.data.labels = outLabels;
+        charts.outHum.data.datasets[0].data = hums;
+        charts.outHum.update();
       }
 
       // Różnica temp. względem ostatniego odczytu wewnętrznego
@@ -1149,6 +1226,7 @@
 
       setOutdoorLoading(false);
       updateOverlayChart(currentRows, hours);
+      updateOverlayHumChart(currentRows, hours);
     }
 
     function updateOverlayChart(indoorRows, hours) {
@@ -1173,6 +1251,28 @@
       overlayChart.data.datasets[1].data = outdoorTemps;
       overlayChart.update();
       document.getElementById('overlayCard').classList.remove('is-loading');
+    }
+
+    function updateOverlayHumChart(indoorRows, hours) {
+      if (!outdoorRows.length || !indoorRows.length) return;
+
+      const labels = indoorRows.map(r => formatTime(r.recorded_at, hours));
+      const indoorHums = indoorRows.map(r => parseFloat(r.humidity_pct));
+      const outdoorHums = indoorRows.map(row => {
+        const ts = new Date(row.recorded_at).getTime();
+        let closest = null, minDiff = Infinity;
+        for (const oh of outdoorRows) {
+          const d = Math.abs(new Date(oh.time).getTime() - ts);
+          if (d < minDiff) { minDiff = d; closest = oh; }
+        }
+        return closest ? closest.humidity : null;
+      });
+
+      overlayHumChart.data.labels = labels;
+      overlayHumChart.data.datasets[0].data = indoorHums;
+      overlayHumChart.data.datasets[1].data = outdoorHums;
+      overlayHumChart.update();
+      document.getElementById('overlayHumCard').classList.remove('is-loading');
     }
 
     /* ═══════════════════════════════════════════════
