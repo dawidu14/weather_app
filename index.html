@@ -403,6 +403,74 @@
       border-color: var(--teal);
       color: var(--teal);
     }
+
+    /* ── City selector ── */
+    .city-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .city-bar .city-bar-label {
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    .city-bar button {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 6px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-family: inherit;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .city-bar button:hover {
+      border-color: var(--teal);
+      color: var(--text);
+    }
+
+    .city-bar button.active {
+      border-color: var(--teal);
+      color: var(--teal);
+    }
+
+    /* ── Section label ── */
+    .section-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+      padding-top: 16px;
+      margin-bottom: 12px;
+      margin-top: 4px;
+    }
+
+    /* ── Chart legend (overlay) ── */
+    .chart-legend {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 6px;
+      font-size: 0.78rem;
+      color: var(--muted);
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .legend-dot {
+      display: inline-block;
+      width: 20px;
+      height: 3px;
+      border-radius: 2px;
+      vertical-align: middle;
+      margin-right: 4px;
+    }
   </style>
 </head>
 
@@ -425,6 +493,12 @@
     <button data-h="48">48h</button>
     <button data-h="168">7 dni</button>
     <button data-h="720">30 dni</button>
+  </div>
+
+  <div class="city-bar">
+    <span class="city-bar-label">Miasto ref.:</span>
+    <button data-city="przemysl" class="active">Przemyśl</button>
+    <button data-city="jaroslaw">Jarosław</button>
   </div>
 
   <div class="cards">
@@ -469,6 +543,32 @@
     </div>
   </div>
 
+  <div class="section-label">Pogoda zewnętrzna — <span id="cityLabel">Przemyśl</span></div>
+  <div class="cards">
+    <div class="card outdoor is-loading">
+      <div class="card-label">Temperatura zewn.</div>
+      <div class="card-value blue" id="cardOutTemp">—</div>
+      <div class="card-trend" id="trendOutTemp"></div>
+      <div class="card-sub" id="cardOutTempSub">min — · max —</div>
+    </div>
+    <div class="card outdoor is-loading">
+      <div class="card-label">Wilgotność zewn.</div>
+      <div class="card-value violet" id="cardOutHum">—</div>
+      <div class="card-trend" id="trendOutHum"></div>
+      <div class="card-sub" id="cardOutHumSub">min — · max —</div>
+    </div>
+    <div class="card outdoor is-loading">
+      <div class="card-label">Warunki pogodowe</div>
+      <div class="card-value comfort" id="cardOutCond">—</div>
+      <div class="card-sub" id="cardOutCondSub">—</div>
+    </div>
+    <div class="card outdoor is-loading">
+      <div class="card-label">Różnica temp.</div>
+      <div class="card-value flat" id="cardTempDiff">—</div>
+      <div class="card-sub" id="cardTempDiffSub">wew. vs zew.</div>
+    </div>
+  </div>
+
   <div id="empty">
     <p>Brak danych dla wybranego zakresu czasu.</p>
     <button class="btn-retry" id="btnRetry">↺ Spróbuj ponownie</button>
@@ -487,6 +587,18 @@
       <div class="chart-title">Ciśnienie (hPa)</div>
       <canvas id="chartPres"></canvas>
     </div>
+    <div class="chart-card outdoor is-loading">
+      <div class="chart-title">Temperatura zewnętrzna (°C)</div>
+      <canvas id="chartOutTemp"></canvas>
+    </div>
+    <div class="chart-card outdoor is-loading" id="overlayCard">
+      <div class="chart-title">Temperatura: wewnątrz vs zewnątrz (°C)</div>
+      <div class="chart-legend">
+        <span><span class="legend-dot" style="background:#f59e0b"></span>Wewnątrz</span>
+        <span><span class="legend-dot" style="background:#60a5fa"></span>Zewnątrz (godzinowo)</span>
+      </div>
+      <canvas id="chartOverlay"></canvas>
+    </div>
   </div>
 
   <script>
@@ -497,6 +609,40 @@
     const SUPABASE_ANON_KEY = 'sb_publishable_DyhhWHN83GulCQ70SyQVww_zTSqLJ3l';
     const TABLE = 'readings';
     const REFRESH_MS = 5 * 60 * 1000;
+
+    /* ── Zewnętrzne miasto ── */
+    const CITIES = {
+      przemysl: { name: 'Przemyśl', lat: 49.7839, lon: 22.7677 },
+      jaroslaw: { name: 'Jarosław', lat: 50.0163, lon: 22.6799 },
+    };
+    let activeCity = 'przemysl';
+    let outdoorRows = [];  // { time: ISO-UTC, temp, humidity, code }
+
+    function weatherIcon(code) {
+      if (code === 0) return '☀️';
+      if (code <= 2) return '🌤️';
+      if (code === 3) return '☁️';
+      if (code <= 48) return '🌫️';
+      if (code <= 57) return '🌦️';
+      if (code <= 67) return '🌧️';
+      if (code <= 77) return '❄️';
+      if (code <= 82) return '🌦️';
+      if (code <= 86) return '🌨️';
+      return '⛈️';
+    }
+
+    function weatherLabel(code) {
+      if (code === 0) return 'Bezchmurnie';
+      if (code <= 2) return 'Małe zachmurzenie';
+      if (code === 3) return 'Zachmurzenie';
+      if (code <= 48) return 'Mgła';
+      if (code <= 57) return 'Mżawka';
+      if (code <= 67) return 'Deszcz';
+      if (code <= 77) return 'Śnieg';
+      if (code <= 82) return 'Przelotne opady';
+      if (code <= 86) return 'Opady śniegu';
+      return 'Burza';
+    }
 
     /* ═══════════════════════════════════════════════
        HELPERS
@@ -642,13 +788,79 @@
       temp: makeChart('chartTemp', '#f59e0b', '°C'),
       hum: makeChart('chartHum', '#4f8ef7', '%'),
       pres: makeChart('chartPres', '#2dd4bf', 'hPa'),
+      outTemp: makeChart('chartOutTemp', '#60a5fa', '°C'),
     };
+
+    /* Overlay chart — dwa datasety bez wypełnienia */
+    const overlayChart = (() => {
+      const ctx = document.getElementById('chartOverlay').getContext('2d');
+      const baseOpts = {
+        animation: false,
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: {
+            display: true,
+            labels: { color: '#8892a4', font: { size: 11 }, boxWidth: 20, boxHeight: 2, padding: 16 },
+          },
+          tooltip: {
+            backgroundColor: '#1a1d27',
+            borderColor: '#2a2d3a',
+            borderWidth: 1,
+            titleColor: '#8892a4',
+            bodyColor: '#e2e8f0',
+            padding: 10,
+            callbacks: { label: (c) => ` ${c.dataset.label}: ${c.parsed.y} °C` },
+          },
+        },
+        scales: {
+          x: { ticks: { maxTicksLimit: 8, color: '#8892a4', font: { size: 11 } }, grid: { color: '#2a2d3a' } },
+          y: { ticks: { maxTicksLimit: 5, color: '#8892a4', font: { size: 11 } }, grid: { color: '#2a2d3a' } },
+        },
+      };
+      return new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: 'Wewnątrz',
+              data: [],
+              borderColor: '#f59e0b',
+              backgroundColor: 'transparent',
+              borderWidth: 2,
+              pointRadius: 0,
+              pointHoverRadius: 4,
+              tension: 0.3,
+            },
+            {
+              label: 'Zewnątrz',
+              data: [],
+              borderColor: '#60a5fa',
+              backgroundColor: 'transparent',
+              borderWidth: 2,
+              borderDash: [5, 3],
+              pointRadius: 0,
+              pointHoverRadius: 4,
+              tension: 0.3,
+            },
+          ],
+        },
+        options: baseOpts,
+      });
+    })();
 
     /* ═══════════════════════════════════════════════
        SKELETON — loading state
     ═══════════════════════════════════════════════ */
     function setLoading(on) {
-      document.querySelectorAll('.card, .chart-card')
+      document.querySelectorAll('.card:not(.outdoor), .chart-card:not(.outdoor)')
+        .forEach(el => el.classList.toggle('is-loading', on));
+    }
+
+    function setOutdoorLoading(on) {
+      document.querySelectorAll('.card.outdoor, .chart-card.outdoor')
         .forEach(el => el.classList.toggle('is-loading', on));
     }
 
@@ -796,6 +1008,8 @@
       document.getElementById('btnCsv').disabled = false;
 
       document.getElementById('empty').style.display = 'none';
+
+      updateOverlayChart(rows, hours);
     }
 
     /* ═══════════════════════════════════════════════
@@ -805,6 +1019,7 @@
       isLoading = true;
       setStatus('load');
       setLoading(true);
+      loadOutdoorWeather(hours);  // równolegle — bez await
 
       const since = new Date(Date.now() - hours * 3600 * 1000).toISOString();
       const maxRows = hours <= 48 ? 576 : hours <= 168 ? 2016 : 8640;
@@ -850,6 +1065,117 @@
     }
 
     /* ═══════════════════════════════════════════════
+       OUTDOOR WEATHER (Open-Meteo)
+    ═══════════════════════════════════════════════ */
+    async function loadOutdoorWeather(hours) {
+      setOutdoorLoading(true);
+      const city = CITIES[activeCity];
+      const pastDays = Math.min(Math.ceil(hours / 24) + 1, 92);
+      const url = 'https://api.open-meteo.com/v1/forecast'
+        + `?latitude=${city.lat}&longitude=${city.lon}`
+        + '&current=temperature_2m,relative_humidity_2m,weather_code'
+        + '&hourly=temperature_2m,relative_humidity_2m,weather_code'
+        + `&past_days=${pastDays}&forecast_days=1&timezone=UTC`;
+
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(res.status);
+        const data = await res.json();
+
+        // Zapisz dane godzinowe jako UTC (dołączamy 'Z' bo open-meteo zwraca bez)
+        outdoorRows = data.hourly.time.map((t, i) => ({
+          time: t + ':00Z',
+          temp: data.hourly.temperature_2m[i],
+          humidity: data.hourly.relative_humidity_2m[i],
+          code: data.hourly.weather_code[i],
+        }));
+
+        renderOutdoor(data, hours);
+      } catch (e) {
+        console.error('Outdoor fetch error:', e);
+        setOutdoorLoading(false);
+      }
+    }
+
+    function renderOutdoor(data, hours) {
+      const cur = data.current;
+      document.getElementById('cardOutTemp').textContent = `${cur.temperature_2m} °C`;
+      document.getElementById('cardOutHum').textContent = `${cur.relative_humidity_2m} %`;
+      document.getElementById('cardOutCond').textContent =
+        `${weatherIcon(cur.weather_code)} ${weatherLabel(cur.weather_code)}`;
+      document.getElementById('cardOutCondSub').textContent = CITIES[activeCity].name;
+
+      const since = Date.now() - hours * 3600 * 1000;
+      const now = Date.now();
+      const filtered = outdoorRows.filter(r => {
+        const t = new Date(r.time).getTime();
+        return t >= since && t <= now;
+      });
+
+      if (filtered.length >= 2) {
+        const temps = filtered.map(r => r.temp);
+        const hums = filtered.map(r => r.humidity);
+
+        document.getElementById('cardOutTempSub').textContent =
+          `min ${Math.min(...temps).toFixed(1)} · max ${Math.max(...temps).toFixed(1)} °C`;
+        document.getElementById('trendOutTemp').innerHTML =
+          trendHtml(filtered[0].temp, filtered[filtered.length - 1].temp, '°C');
+        document.getElementById('cardOutHumSub').textContent =
+          `min ${Math.min(...hums)} · max ${Math.max(...hums)} %`;
+        document.getElementById('trendOutHum').innerHTML =
+          trendHtml(filtered[0].humidity, filtered[filtered.length - 1].humidity, '%');
+
+        charts.outTemp.data.labels = filtered.map(r => formatTime(r.time, hours));
+        charts.outTemp.data.datasets[0].data = temps;
+        charts.outTemp.update();
+      }
+
+      // Różnica temp. względem ostatniego odczytu wewnętrznego
+      if (currentRows.length > 0) {
+        const lastIn = parseFloat(currentRows[currentRows.length - 1].temp_c);
+        const closest = outdoorRows.reduce((best, oh) => {
+          const d = Math.abs(new Date(oh.time).getTime() - now);
+          return d < Math.abs(new Date(best.time).getTime() - now) ? oh : best;
+        });
+        const diff = parseFloat((lastIn - closest.temp).toFixed(1));
+        const sign = diff > 0 ? '+' : '';
+        const cls = diff > 2 ? 'pos' : diff < -2 ? 'neg' : 'flat';
+        const el = document.getElementById('cardTempDiff');
+        el.textContent = `${sign}${diff} °C`;
+        el.className = `card-value ${cls}`;
+        document.getElementById('cardTempDiffSub').textContent =
+          `wew. ${lastIn}°C · zew. ${closest.temp.toFixed(1)}°C`;
+      }
+
+      setOutdoorLoading(false);
+      updateOverlayChart(currentRows, hours);
+    }
+
+    function updateOverlayChart(indoorRows, hours) {
+      if (!outdoorRows.length || !indoorRows.length) return;
+
+      const labels = indoorRows.map(r => formatTime(r.recorded_at, hours));
+      const indoorTemps = indoorRows.map(r => parseFloat(r.temp_c));
+
+      // Dopasuj najbliższy outdoor odczyt godzinowy do każdego indoor punktu
+      const outdoorTemps = indoorRows.map(row => {
+        const ts = new Date(row.recorded_at).getTime();
+        let closest = null, minDiff = Infinity;
+        for (const oh of outdoorRows) {
+          const d = Math.abs(new Date(oh.time).getTime() - ts);
+          if (d < minDiff) { minDiff = d; closest = oh; }
+        }
+        return closest ? parseFloat(closest.temp.toFixed(1)) : null;
+      });
+
+      overlayChart.data.labels = labels;
+      overlayChart.data.datasets[0].data = indoorTemps;
+      overlayChart.data.datasets[1].data = outdoorTemps;
+      overlayChart.update();
+      document.getElementById('overlayCard').classList.remove('is-loading');
+    }
+
+    /* ═══════════════════════════════════════════════
        INTERVAL + RANGE BUTTONS
     ═══════════════════════════════════════════════ */
     let activeHours = 24;
@@ -869,6 +1195,17 @@
         activeHours = parseInt(btn.dataset.h);
         loadData(activeHours);
         startInterval();
+      });
+    });
+
+    document.querySelectorAll('.city-bar button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.city-bar button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        activeCity = btn.dataset.city;
+        document.getElementById('cityLabel').textContent = CITIES[activeCity].name;
+        outdoorRows = [];
+        loadOutdoorWeather(activeHours);
       });
     });
 
